@@ -33,6 +33,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GOOGLE_SHEETS_KEY: ${{ secrets.GOOGLE_SHEETS_KEY }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          ARXIV_QUERY: ${{ vars.ARXIV_QUERY }}
         run: python arxiv_slack_bot.py
 
       - name: Commit and push sent_papers.jsonl
