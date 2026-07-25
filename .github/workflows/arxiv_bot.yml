@@ -5,6 +5,9 @@ on:
     - cron: '0 0 * * *' # 매일 한국시간 09:00 (UTC 00:00)
   workflow_dispatch:     # 수동 실행 버튼
 
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  
 jobs:
   run-bot:
     runs-on: ubuntu-latest
