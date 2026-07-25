@@ -150,11 +150,13 @@ def main():
     webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
     sent_ids = load_sent_paper_ids()
 
+    query = os.environ.get("ARXIV_QUERY", 'all:"Machine learning interatomic potentials"')
+    logging.info(f"검색 키워드: {query}")
+    
     client = arxiv.Client()
-
-    # 원하시는 키워드로 검색어 변경 가능
+ 
     search = arxiv.Search(
-        query='all:"Machine learning interatomic potentials"',
+        query=query,
         max_results=5,
         sort_by=arxiv.SortCriterion.SubmittedDate
     )
