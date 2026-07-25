@@ -150,6 +150,8 @@ def main():
     webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
     sent_ids = load_sent_paper_ids()
 
+    client = arxiv.Client()
+
     # 원하시는 키워드로 검색어 변경 가능
     search = arxiv.Search(
         query='all:"Machine learning interatomic potentials"',
@@ -159,7 +161,7 @@ def main():
 
     today_str = datetime.datetime.now().strftime("%Y-%m-%d")
 
-    for result in search.results():
+    for result in client.results(search):
         arxiv_id = result.entry_id.split("/")[-1].split("v")[0]
 
         if arxiv_id in sent_ids:
