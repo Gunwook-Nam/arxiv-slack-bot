@@ -1,13 +1,16 @@
-name: ArXiv Slack Bot Workflow
+name: arXiv Slack Bot
 
 on:
   schedule:
-    - cron: '0 0 * * *' # 매일 한국시간 09:00 (UTC 00:00)
-  workflow_dispatch:     # 수동 실행 버튼
+    - cron: "30 14 * * 1-5"
+      timezone: "Asia/Seoul"
 
-env:
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-  
+  workflow_dispatch:
+
+concurrency:
+  group: arxiv-slack-bot
+  cancel-in-progress: false
+
 jobs:
   run-bot:
     runs-on: ubuntu-latest
@@ -19,26 +22,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-          cache: 'pip'
+          python-version: "3.10"
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
-      - name: Run ArXiv Bot
+      - name: Run arXiv bot
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: gpt-4o-mini
           GOOGLE_SHEETS_KEY: ${{ secrets.GOOGLE_SHEETS_KEY }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-          ARXIV_QUERY: ${{ vars.ARXIV_QUERY }}
+          ARXIV_CONTACT_EMAIL: ${{ secrets.ARXIV_CONTACT_EMAIL }}
         run: python arxiv_slack_bot.py
-
-      - name: Commit and push sent_papers.jsonl
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add sent_papers.jsonl
-          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update sent papers log [skip ci]" && git push)
