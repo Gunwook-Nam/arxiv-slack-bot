@@ -486,7 +486,7 @@ def build_slack_payload(paper: Paper, summary: str) -> dict:
 
     metadata = "\n".join(
         [
-            f"*{theme_text}*",
+            f"### {theme_text}",
             f"<{paper.abstract_url}|{paper.title}>",
             f"*저자:* {authors}",
             f"*Submitted:* {paper.created.isoformat()}",
@@ -512,7 +512,6 @@ def build_slack_payload(paper: Paper, summary: str) -> dict:
     ]
 
     return {
-        "text": f"{theme_text}: {paper.title}",
         "attachments": [{"color": color, "blocks": blocks}],
         "unfurl_links": False,
         "unfurl_media": False,
