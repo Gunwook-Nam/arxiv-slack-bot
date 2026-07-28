@@ -548,15 +548,22 @@ def send_slack(
 
 def main() -> None:
     config = Config()
+    test_mode = os.getenv("TEST_MODE", "false").lower() == "true"
+    
     sheet = open_google_sheet()
-
     sent_ids = load_sent_ids(config.sent_file) | load_sheet_ids(sheet)
+
+    logging.info("실행 모드: %s", "TEST" if test_mode else "NORMAL")
     logging.info("이미 전송된 논문 수: %d", len(sent_ids))
 
     papers = harvest_papers(config)
-    new_papers = [paper for paper in papers if paper.arxiv_id not in sent_ids]
-    new_papers = sort_papers_by_theme(new_papers, config)
+    papers = sort_papers_by_theme(papers, config)
 
+    if test_mode:
+        new_papers = papers[:1]
+    else:
+        new_papers = [paper for paper in papers if paper.arxiv_id not in sent_ids]
+        
     logging.info("최근 %d일 관련 논문 수: %d", config.lookback_days, len(papers))
     logging.info("신규 전송 대상 수: %d", len(new_papers))
 
@@ -590,6 +597,10 @@ def main() -> None:
         if not send_slack(webhook_url, paper, summary):
             continue
 
+        if test_mode:
+            logging.info("TEST_MODE: 전송 기록을 저장하지 않는다 [%s]", paper.arxiv_id)
+            continue
+            
         record = {
             "sent_date": sent_date,
             "arxiv_id": paper.arxiv_id,
