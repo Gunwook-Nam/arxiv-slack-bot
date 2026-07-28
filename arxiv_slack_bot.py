@@ -581,7 +581,7 @@ def main() -> None:
 
         if primary_theme != current_theme:
             current_theme = primary_theme
-            logging.info(""===== Theme: %s =====", current_theme)
+            logging.info("===== Theme: %s =====", current_theme)
             
         logging.info("처리 중: %s (%s)", paper.title, paper.arxiv_id)
 
