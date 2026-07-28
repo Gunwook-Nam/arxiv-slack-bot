@@ -6,6 +6,12 @@ on:
       timezone: "Asia/Seoul"
 
   workflow_dispatch:
+      inputs:
+        test_mode:
+          description: "Send one paper without saving history"
+          required: false
+          default: false
+          type: boolean
 
 concurrency:
   group: arxiv-slack-bot
