@@ -486,7 +486,6 @@ def build_slack_payload(paper: Paper, summary: str) -> dict:
 
     metadata = "\n".join(
         [
-            f"### {theme_text}",
             f"<{paper.abstract_url}|{paper.title}>",
             f"*저자:* {authors}",
             f"*Submitted:* {paper.created.isoformat()}",
@@ -494,7 +493,14 @@ def build_slack_payload(paper: Paper, summary: str) -> dict:
     )
 
     blocks = [
-        {"type": "section", "text": {"type": "mrkdwn", "text": metadata}},
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": theme_text},
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": metadata}
+        },
         {
             "type": "section",
             "text": {"type": "mrkdwn", "text": f"*한글 요약*\n{summary}"},
