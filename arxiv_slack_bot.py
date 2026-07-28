@@ -15,6 +15,28 @@ from openai import OpenAI
 from oauth2client.service_account import ServiceAccountCredentials
 
 
+THEME_COLORS = {
+    "MLIP / Atomistic ML": "#2F80ED",
+    "Molecular generation": "#9B51E0",
+    "Materials discovery": "#27AE60",
+    "Battery / Electrolyte": "#F2994A",
+    "Computational chemistry": "#EB5757",
+    "Scientific agents": "#56CCF2",
+}
+
+DEFAULT_THEME_COLOR = "#808080"
+
+
+def get_theme_color(themes: tuple[str, ...]) -> str:
+    if not themes:
+        return DEFAULT_THEME_COLOR
+
+    # use first theme color when it has mutliple themes
+    return THEME_COLORS.get(
+        themes[0],
+        DEFAULT_THEME_COLOR,
+    )
+    
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -151,7 +173,26 @@ def classify_themes(title: str, abstract: str, config: Config) -> tuple[str, ...
 
     return tuple(matched)
 
+def sort_papers_by_theme(
+    papers: list[Paper],
+    config: Config,
+) -> list[Paper]:
+    theme_order = {
+        theme: index
+        for index, theme in enumerate(config.themes)
+    }
 
+    return sorted(
+        papers,
+        key=lambda paper: (
+            theme_order.get(
+                paper.themes[0],
+                len(theme_order),
+            ),
+            -paper.created.toordinal(),
+            paper.title.lower(),
+        ),
+    )
 def request_oai(
     session: requests.Session,
     config: Config,
@@ -426,63 +467,82 @@ def summarize_paper(client: OpenAI | None, paper: Paper) -> str:
         return "요약 생성 중 오류가 발생했습니다."
 
 
-def send_slack(webhook_url: str, paper: Paper, summary: str) -> bool:
+def format_authors(authors: tuple[str, ...], limit: int = 3) -> str:
+    if not authors:
+        return "정보 없음"
+
+    text = ", ".join(authors[:limit])
+
+    if len(authors) > limit:
+        text += " 등"
+
+    return text
+
+def build_slack_payload(paper: Paper, summary: str) -> dict:
+    theme_text = ", ".join(paper.themes)
+    primary_theme = paper.themes[0] if paper.themes else ""
+    color = THEME_COLORS.get(primary_theme, DEFAULT_THEME_COLOR)
+    authors = format_authors(paper.authors)
+
+    metadata = "\n".join(
+        [
+            f"*{theme_text}*",
+            f"<{paper.abstract_url}|{paper.title}>",
+            f"*저자:* {authors}",
+            f"*Submitted:* {paper.created.isoformat()}",
+        ]
+    )
+
+    blocks = [
+        {"type": "section", "text": {"type": "mrkdwn", "text": metadata}},
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*한글 요약*\n{summary}"},
+        },
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "PDF"},
+                    "url": paper.pdf_url,
+                }
+            ],
+        },
+    ]
+
+    return {
+        "text": f"{theme_text}: {paper.title}",
+        "attachments": [{"color": color, "blocks": blocks}],
+        "unfurl_links": False,
+        "unfurl_media": False,
+    }
+
+
+def send_slack(
+    webhook_url: str,
+    paper: Paper,
+    summary: str,
+) -> bool:
     if not webhook_url:
         logging.error("SLACK_WEBHOOK_URL이 설정되지 않았습니다.")
         return False
 
-    authors = ", ".join(paper.authors[:3])
-    if len(paper.authors) > 3:
-        authors += " 등"
-
-    payload = {
-        "blocks": [
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": f"arXiv 신규 논문 [{paper.arxiv_id}]",
-                },
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": (
-                        f"*<{paper.abstract_url}|{paper.title}>*\n"
-                        f"*Theme:* {', '.join(paper.themes)}\n"
-                        f"*저자:* {authors or '정보 없음'}\n"
-                        f"*Submitted:* {paper.created.isoformat()}"
-                    ),
-                },
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*한글 요약*\n{summary}",
-                },
-            },
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "PDF"},
-                        "url": paper.pdf_url,
-                    }
-                ],
-            },
-            {"type": "divider"},
-        ]
-    }
-
     try:
-        response = requests.post(webhook_url, json=payload, timeout=20)
+        response = requests.post(
+            webhook_url,
+            json=build_slack_payload(paper, summary),
+            timeout=20,
+        )
         response.raise_for_status()
         return True
+
     except requests.RequestException as error:
-        logging.error("Slack 전송 실패 [%s]: %s", paper.arxiv_id, error)
+        logging.error(
+            "Slack 전송 실패 [%s]: %s",
+            paper.arxiv_id,
+            error,
+        )
         return False
 
 
@@ -495,6 +555,7 @@ def main() -> None:
 
     papers = harvest_papers(config)
     new_papers = [paper for paper in papers if paper.arxiv_id not in sent_ids]
+    new_papers = sort_papers_by_theme(new_papers, config)
 
     logging.info("최근 %d일 관련 논문 수: %d", config.lookback_days, len(papers))
     logging.info("신규 전송 대상 수: %d", len(new_papers))
@@ -514,7 +575,14 @@ def main() -> None:
     webhook_url = os.getenv("SLACK_WEBHOOK_URL", "")
     sent_date = dt.datetime.now(SEOUL_TZ).date().isoformat()
 
+    current_theme = None
     for paper in new_papers:
+        primary_theme = (paper.themes[0] if paper.themes else "Unclassified")
+
+        if primary_theme != current_theme:
+            current_theme = primary_theme
+            logging.info(""===== Theme: %s =====", current_theme)
+            
         logging.info("처리 중: %s (%s)", paper.title, paper.arxiv_id)
 
         summary = summarize_paper(openai_client, paper)
